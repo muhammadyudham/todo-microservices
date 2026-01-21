@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Todo List Teavou</title>
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <h1>📝 Todo List Teavou</h1>
+
+    <div class="form-container">
+        <h3 style="margin-top:0;">Tambah Tugas Baru</h3>
+        <input type="text" id="title" placeholder="Judul Tugas..." required>
+        <textarea id="description" placeholder="Catatan tambahan..." rows="2"></textarea>
+        
+        <div style="display: flex; gap: 10px;">
+            <div style="flex: 1;">
+                <label>📅 Batas Waktu:</label>
+                <input type="date" id="deadline">
+            </div>
+            <div style="flex: 1;">
+                <label>🎨 Warna:</label>
+                <input type="color" id="color" value="#007bff" style="height: 42px; padding: 2px;">
+            </div>
+        </div>
+        
+        <button id="add-btn" onclick="addTodo()">+ Simpan Tugas</button>
+    </div>
+
+    <h3 class="section-title">⏳ Tugas Aktif</h3>
+    <div id="incomplete-list" class="todo-container"></div>
+
+    <h3 class="section-title">✅ Riwayat Selesai</h3>
+    <div id="completed-list" class="todo-container"></div>
+
+    <script>
+        const API_URL = 'http://localhost:3001/api/v1/todo';
+
+        function formatDate(dateString) {
+            if(!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+        }
+
+        // Fungsi Escape HTML (Aman kutip & Enter)
+        function escapeHtml(text) {
+            if (!text) return "";
+            return text
+                .replace(/\\/g, '\\\\')  
+                .replace(/'/g, "\\'")    
+                .replace(/"/g, '&quot;') 
+                .replace(/\n/g, '\\n')   
+                .replace(/\r/g, '');     
+        }
+
+        async function fetchTodos() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                
+                const incompleteContainer = document.getElementById('incomplete-list');
+                const completedContainer = document.getElementById('completed-list');
+                
+                incompleteContainer.innerHTML = ''; 
+                completedContainer.innerHTML = '';
+
+                if (!data.todos || data.todos.length === 0) {
+                    incompleteContainer.innerHTML = '<div class="empty-msg">Belum ada tugas. Yuk buat baru!</div>';
+                    return;
+                }
+
+                data.todos.forEach(todo => {
+                    const card = document.createElement('div');
+                    const isDone = todo.isCompleted;
+                    const deadlineHtml = todo.deadline ? `<span class="todo-date">📅 Tenggat: ${formatDate(todo.deadline)}</span>` : '';
+
+                    card.className = `todo-card ${isDone ? 'completed' : ''}`;
+                    if(!isDone) card.style.borderLeftColor = todo.cardColor;
+
+                    card.innerHTML = `
+                        <div class="todo-info" onclick="toggleComplete('${todo._id}', ${isDone}, '${escapeHtml(todo.title)}', '${escapeHtml(todo.description)}', '${todo.cardColor}', '${todo.deadline || ''}')">
+                            <div class="todo-title">${todo.title}</div>
+                            <div class="todo-desc">${todo.description}</div>
+                            ${deadlineHtml}
+                            <small style="color:${isDone ? '#28a745' : '#ffc107'}; font-weight:bold;">
+                                ${isDone ? '✓ Selesai (Klik untuk batalkan)' : '○ Klik untuk selesaikan'}
+                            </small>
+                        </div>
+                        <button class="delete-btn" onclick="deleteTodo('${todo._id}')">Hapus</button>
+                    `;
+
+                    if (isDone) completedContainer.appendChild(card);
+                    else incompleteContainer.appendChild(card);
+                });
+
+            } catch (error) {
+                console.error("Gagal ambil data:", error);
+            }
+        }
+
+        async function addTodo() {
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const color = document.getElementById('color').value;
+            const deadline = document.getElementById('deadline').value;
+
+            if(!title) return alert("Judul wajib diisi!");
+
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, description, cardColor: color, deadline })
+            });
+
+            document.getElementById('title').value = '';
+            document.getElementById('description').value = '';
+            document.getElementById('deadline').value = '';
+            fetchTodos(); 
+        }
+
+        async function deleteTodo(id) {
+            if(confirm('Hapus tugas ini permanen?')) {
+                await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                fetchTodos();
+            }
+        }
+
+        async function toggleComplete(id, currentStatus, title, desc, color, deadline) {
+            const message = currentStatus 
+                ? "Batalkan status selesai untuk tugas ini?" 
+                : "Tandai tugas ini sebagai selesai?";       
+
+            const yakin = confirm(message);
+            if (!yakin) return; 
+
+            const newStatus = !currentStatus;
+
+            await fetch(`${API_URL}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    title: title, 
+                    description: desc, 
+                    cardColor: color, 
+                    deadline: deadline, 
+                    isCompleted: newStatus 
+                })
+            });
+            fetchTodos(); 
+        }
+
+        fetchTodos();
+    </script>
+</body>
+</html>
