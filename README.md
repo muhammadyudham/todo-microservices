@@ -178,7 +178,7 @@ kill -9 <PID>                   # macOS/Linux
 
 ## 👤 Author
 
-[Your Name/Username]
+[Muhammad Yudha Maputra]
 
 ## 📄 License
 
