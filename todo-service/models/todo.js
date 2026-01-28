@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 
 const todoSchema = mongoose.Schema({
+    // --- TAMBAHAN WAJIB (AGAR DATA TERPISAH) ---
+    userId: { 
+        type: String, 
+        required: true // Wajib ada, biar tidak ada tugas tanpa tuan
+    },
+    // -------------------------------------------
+
     title: {
         type: String,
         required: true
@@ -10,12 +17,10 @@ const todoSchema = mongoose.Schema({
         required: true,
         default: 'N/A'
     },
-    // --- TAMBAHAN BARU DI SINI ---
     deadline: {
-        type: Date,    // Tipe datanya Tanggal
-        default: null  // Default kosong (jika user tidak isi)
+        type: Date,    
+        default: null 
     },
-    // -----------------------------
     onDate: {
         type: Date,
         required: true,

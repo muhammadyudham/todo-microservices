@@ -1,4 +1,5 @@
 const Todo = require("../models/todo");
+const axios = require('axios'); // <--- PANGGIL AXIOS (Pengganti Fetch)
 
 // 1. CREATE TODO (DENGAN MICROSERVICES)
 exports.createTodo = async (req, res, next) => {
@@ -6,7 +7,7 @@ exports.createTodo = async (req, res, next) => {
     console.log((new Date()).toISOString(), req.method, req.baseUrl);
 
     // Persiapan Data (Cek Deadline)
-    let todoData = { ...req.body };
+    let todoData = { ...req.body, userId: req.user.id };
     if (todoData.deadline === "") {
         todoData.deadline = null;
     }
@@ -18,20 +19,17 @@ exports.createTodo = async (req, res, next) => {
         const createdTodo = await todo.save();
 
         // B. MICROSERVICES: Panggil Service Notifikasi (Service B)
-        // Kita "menelpon" server sebelah di Port 3002
+        // Kita gunakan AXIOS ke Port 3002
         try {
-            await fetch('http://localhost:3002/notify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: createdTodo.title,
-                    deadline: createdTodo.deadline
-                })
+            await axios.post('http://localhost:3002/notify', {
+                title: createdTodo.title,
+                deadline: createdTodo.deadline,
+                email: 'user_demo@gmail.com' 
             });
             console.log("✅ Berhasil memanggil Notification Service");
         } catch (err) {
-            // Jika Service B mati, jangan bikin error aplikasi utama
-            console.log("⚠️ Gagal memanggil Notification Service (Pastikan Port 3002 Nyala)");
+            // Jika Service B mati, aplikasi utama TIDAK BOLEH error. Cukup di-log saja.
+            console.error("⚠️ Gagal memanggil Notification Service (Pastikan Port 3002 Nyala)");
         }
 
         // C. Kirim Respon Sukses ke User
@@ -58,15 +56,15 @@ exports.createTodo = async (req, res, next) => {
 exports.getTodos = (req, res, next) => {
     console.log((new Date()).toISOString(), req.method, req.baseUrl);
 
-    const TodoQuery = Todo.find().sort({ onDate: -1 });
+    const TodoQuery = Todo.find({ userId: req.user.id }).sort({ onDate: -1 });
 
     TodoQuery.then(todos => {
         if (!todos.length) {
-            return res.status(404).json({
+            return res.status(200).json({ 
                 'status': 'Success',
                 'message': 'No Todos found!',
-                'todos': todos,
-                'todoCount': todos.length
+                'todos': [],
+                'todoCount': 0
             });
         }
         res.status(200).json({
@@ -89,7 +87,7 @@ exports.getTodo = (req, res, next) => {
     console.log((new Date()).toISOString(), req.method, req.baseUrl);
     const todoId = req.params.todoId;
 
-    Todo.findOne({ _id: todoId }).then(todo => {
+    Todo.findOne({ _id: todoId, userId: req.user.id }).then(todo => {
         if (!todo) {
             return res.status(404).json({
                 'status': 'Success',
@@ -123,7 +121,7 @@ exports.updateTodo = (req, res, next) => {
     }
 
     Todo.findOneAndUpdate(
-        { _id: todoId },
+        { _id: todoId, userId: req.user.id },
         { ...data, 'timestamps.modifiedOn': Date.now() },
         { new: true }
     ).then(updatedTodo => {
@@ -141,32 +139,47 @@ exports.updateTodo = (req, res, next) => {
     });
 }
 
-// 5. MARK COMPLETED
-exports.completeTodo = (req, res, next) => {
+// 5. MARK COMPLETED (TOGGLE / SAKLAR) - UPDATED!
+exports.completeTodo = async (req, res, next) => {
     console.log((new Date()).toISOString(), req.method, req.baseUrl);
     const todoId = req.params.todoId;
 
-    Todo.findOneAndUpdate(
-        { _id: todoId },
-        {
-            'isCompleted': true,
-            'timestamps.modifiedOn': Date.now(),
-            'timestamps.completedOn': Date.now()
-        },
-        { new: true }
-    ).then(updatedTodo => {
+    try {
+        // 1. Cari dulu tugasnya
+        const todo = await Todo.findOne({ _id: todoId, userId: req.user.id });
+        
+        if (!todo) {
+            return res.status(404).json({ 
+                status: 'Error', 
+                message: "Tugas tidak ditemukan" 
+            });
+        }
+
+        // 2. Balikkan statusnya (True jadi False, False jadi True)
+        todo.isCompleted = !todo.isCompleted;
+        
+        // 3. Update timestamp
+        todo.timestamps.modifiedOn = Date.now();
+        if (todo.isCompleted) {
+            todo.timestamps.completedOn = Date.now();
+        }
+
+        // 4. Simpan perubahan
+        const updatedTodo = await todo.save();
+
         res.status(201).json({
             'status': 'Success',
-            'message': 'Todo Marked as Completed!',
+            'message': todo.isCompleted ? 'Tugas Selesai!' : 'Status Dibatalkan (Aktif Kembali)',
             'todo': updatedTodo
         });
-    }).catch(error => {
+
+    } catch (error) {
         res.status(500).json({
             'status': 'Error',
             'message': 'Error in DB Operation!',
-            'error': error
+            'error': error.message
         });
-    });
+    }
 }
 
 // 6. DELETE TODO
@@ -174,7 +187,7 @@ exports.deleteTodo = (req, res, next) => {
     console.log((new Date()).toISOString(), req.method, req.baseUrl);
     const todoId = req.params.todoId;
 
-    Todo.findOneAndDelete({ _id: todoId }).then(deletedTodo => {
+    Todo.findOneAndDelete({ _id: todoId, userId: req.user.id }).then(deletedTodo => {
         res.status(201).json({
             'status': 'Success',
             'message': 'Todo Deleted Successfully!'

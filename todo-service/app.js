@@ -3,52 +3,40 @@ const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const cors = require("cors");
 
-// Import Creds
-const mongo = require("./credentials/mongo");
-
-// Imports for Routes
+// Import Routes
 const todoRoutes = require("./routes/todo");
 
 // Create an Express App
 const app = express();
 
-// Handle MongoDB Connection
+// --- 1. KONEKSI DATABASE (LANGSUNG) ---
+// Kita pakai string langsung biar tidak error cari file credentials
+const dbPath = "mongodb://127.0.0.1:27017/microservice-todo";
+
 mongoose
-  .connect(mongo.localConnString, {
-    useNewUrlParser: true
-  })
+  .connect(dbPath)
   .then(() => {
-    console.log("Connected to database!");
+    console.log("✅ Todo Database Connected!");
   })
   .catch(() => {
-    console.log("Connection failed!");
+    console.log("❌ Connection failed!");
   });
 
-// Use body-parser to parse incoming reuests
+// Use body-parser to parse incoming requests
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
   extended: false
 }));
 
-// Use Cors to avoid annoying CORS Errors
+// --- 2. CORS (PENTING) ---
 app.use(cors());
 
-// Handle Authentication If Any
+// --- 3. SERVE STATIC FILES (HTML, CSS) ---
+app.use(express.static('.'));
 
-// Send basic info about the API
-app.use("/api/info", (req, res, next) => {
-  res.status(200).json({
-    name: "TODO Api",
-    version: "1.0",
-    description: "RESTful API Designed in Node.js for TODO application.",
-    methodsAllowed: "GET, POST, PUT, PATCH, DELETE",
-    authType: "None",
-    rootEndPoint: req.protocol + '://' + req.get('host') + '/api/v1',
-    documentation: "https://github.com/toslimarif/todo-api"
-  });
-});
-
-// Set up API Routes
-app.use("/api/v1/todo", todoRoutes);
+// --- 4. PERBAIKAN RUTE (PENTING) ---
+// Ubah dari '/api/v1/todo' menjadi '/todos'
+// Agar COCOK dengan Frontend Anda (http://localhost:3001/todos)
+app.use("/todos", todoRoutes);
 
 module.exports = app;
