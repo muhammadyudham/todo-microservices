@@ -54,11 +54,26 @@
                 document.getElementById('display-username').innerText = storedUser;
             }
             fetchTodos();
+            
+            // Real-time: Setiap 60 detik, cek apakah deadline sudah terlewat
+            // Contoh: Tenggat 31 Jan 2026, saat hari berganti jadi 1 Feb 2026,
+            // status otomatis berubah ke "SUDAH LEWAT" tanpa aksi user
+            setInterval(fetchTodos, 60000);
         }
 
         function logout() {
             localStorage.clear();
             window.location.href = 'login.html';
+        }
+
+        // Fungsi untuk format tanggal ke "DD Bulan YYYY" (Bahasa Indonesia)
+        function formatDateToIndonesian(dateString) {
+            const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+            const date = new Date(dateString);
+            const day = date.getDate();
+            const month = months[date.getMonth()];
+            const year = date.getFullYear();
+            return `${day} ${month} ${year}`;
         }
 
         async function fetchTodos() {
@@ -84,6 +99,50 @@
                 const div = document.createElement('div');
                 let borderColor = todo.isCompleted ? '#28a745' : (todo.cardColor || '#cddc39');
                 const dateDisplay = todo.deadline ? todo.deadline.split('T')[0] : '';
+                const completedDate = todo.timestamps && todo.timestamps.completedOn ? new Date(todo.timestamps.completedOn).toISOString().split('T')[0] : '';
+                
+                // Format tanggal ke Indonesia
+                const dateDisplayIndonesian = dateDisplay ? formatDateToIndonesian(dateDisplay) : '';
+                const completedDateIndonesian = completedDate ? formatDateToIndonesian(completedDate) : '';
+                
+                // Cek apakah tugas diselesaikan setelah deadline (Terlewat)
+                let isLate = false;
+                if (todo.isCompleted && todo.deadline && todo.timestamps && todo.timestamps.completedOn) {
+                    const deadline = new Date(todo.deadline);
+                    const completed = new Date(todo.timestamps.completedOn);
+                    deadline.setHours(0, 0, 0, 0);
+                    completed.setHours(0, 0, 0, 0);
+                    if (completed > deadline) {
+                        isLate = true;
+                    }
+                }
+                
+                // Cek apakah deadline sudah lewat (hanya untuk tugas aktif)
+                let isOverdue = false;
+                let daysLeft = '';
+                if (todo.deadline && !todo.isCompleted) {
+                    const deadline = new Date(todo.deadline);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    deadline.setHours(0, 0, 0, 0);
+                    
+                    if (deadline < today) {
+                        isOverdue = true;
+                        daysLeft = '⚠️ SUDAH LEWAT';
+                    } else {
+                        const diffTime = deadline - today;
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays === 0) {
+                            daysLeft = '🔴 HARI INI';
+                        } else if (diffDays === 1) {
+                            daysLeft = '🟠 BESOK';
+                        } else if (diffDays <= 3) {
+                            daysLeft = `⏰ ${diffDays} hari lagi`;
+                        } else {
+                            daysLeft = `📅 ${diffDays} hari lagi`;
+                        }
+                    }
+                }
 
                 div.className = 'todo-item';
                 div.style.borderLeftColor = borderColor;
@@ -91,13 +150,29 @@
                     div.style.opacity = '0.7';
                     div.style.backgroundColor = '#f9f9f9';
                 }
+                
+                // Highlight jika deadline sudah lewat
+                if (isOverdue) {
+                    div.style.backgroundColor = '#fff3cd';
+                    div.style.borderLeftColor = '#ff4444';
+                    div.style.borderLeftWidth = '4px';
+                }
+                
+                // Highlight jika tugas diselesaikan setelah deadline
+                if (isLate) {
+                    div.style.backgroundColor = '#ffe0e0';
+                    div.style.borderLeftColor = '#ff6666';
+                    div.style.borderLeftWidth = '4px';
+                }
 
                 div.innerHTML = `
                     <div class="todo-content" onclick="toggleStatus('${todo._id}')">
                         <div class="todo-title" style="${todo.isCompleted ? 'text-decoration: line-through; color: #888;' : ''}">${todo.title}</div>
                         <div class="todo-desc">${todo.description || '-'}</div>
                         <div class="todo-meta">
-                            ${dateDisplay ? `<span class="date-badge">📅 ${dateDisplay}</span>` : ''}
+                            ${todo.isCompleted && dateDisplayIndonesian ? `<span class="date-badge" style="${isLate ? 'background-color: #ff6666; color: white;' : 'background-color: #28a745; color: white;'}">${isLate ? '⚠️ Tenggat: ' + dateDisplayIndonesian : '✔ Tenggat: ' + dateDisplayIndonesian}</span>` : ''}
+                            ${todo.isCompleted && completedDateIndonesian ? `<span class="date-badge" style="${isLate ? 'background-color: #ff6666; color: white;' : 'background-color: #1976d2; color: white;'}">${isLate ? '❌ Selesai: ' + completedDateIndonesian : '📝 Selesai: ' + completedDateIndonesian}</span>` : ''}
+                            ${!todo.isCompleted && dateDisplay ? `<span class="date-badge" style="${isOverdue ? 'background-color: #ff4444; color: white;' : ''}">${daysLeft ? daysLeft + ' (' + dateDisplay + ')' : '📅 ' + dateDisplay}</span>` : ''}
                             <span class="status-text ${todo.isCompleted ? 'text-success' : 'text-warning'}">
                                 ${todo.isCompleted ? '✔ Selesai' : '○ Klik untuk selesaikan'}
                             </span>
