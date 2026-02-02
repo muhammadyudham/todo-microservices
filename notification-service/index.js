@@ -1,14 +1,17 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 
 const app = express();
-const PORT = 3002; // Perhatikan: Portnya BEDA dengan Todo Service (3000/3001)
+const PORT = process.env.PORT || 3002; // Port configurable via env
 
-app.use(bodyParser.json());
+app.use(express.json());
 
 // Endpoint untuk menerima notifikasi
 app.post('/notify', (req, res) => {
     const { title, deadline } = req.body;
+
+    if (!title) {
+        return res.status(400).json({ status: 'error', message: 'Title is required' });
+    }
     
     console.log("========================================");
     console.log(`[SERVICE NOTIFIKASI] Menerima Data Baru:`);
